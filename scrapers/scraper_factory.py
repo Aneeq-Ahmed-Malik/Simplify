@@ -1,12 +1,13 @@
 from scraper import WebScraper
 from medium_scraper import MediumScraper
 from wix_scraper import WixScraper
-
+from devto_scraper import DevtoScraper
 class ScraperFactory:
     """Factory class to create scraper instances based on site name."""
     _scrapers = {
         "medium": MediumScraper,
-        "wix": WixScraper
+        "wix": WixScraper,
+        "devto": DevtoScraper,
         ## add other classes here
     }
 
