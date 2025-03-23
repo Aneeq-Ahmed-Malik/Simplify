@@ -1,0 +1,11 @@
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Editor-specific files
+.vscode/
+
+chromedriver/
+chromedriver.exe
+*.exe
