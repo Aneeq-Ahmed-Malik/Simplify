@@ -23,6 +23,18 @@ const Navbar = () => {
     return location.pathname === path;
   };
 
+  // Avatar logic: Get first two initials, uppercase (e.g., "Abdullah Mehmood" -> "AM")
+  const getAvatar = (name: string | undefined) => {
+    if (!name) return "U";
+    const initials = name
+      .split(" ")
+      .map(n => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+    return initials || "U";
+  };
+
   return (
     <nav className="bg-white dark:bg-gray-900 shadow-sm border-b border-border sticky top-0 z-10 backdrop-blur-sm bg-opacity-90 dark:bg-opacity-90">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -78,7 +90,7 @@ const Navbar = () => {
                 <>
                   <div className="flex items-center mr-2">
                     <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-medium">
-                      {user?.name?.charAt(0) || 'U'}
+                      {getAvatar(user?.name)}
                     </div>
                     <span className="ml-2 text-sm font-medium hidden lg:block">
                       {user?.name || 'User'}
@@ -179,7 +191,7 @@ const Navbar = () => {
                 <>
                   <div className="flex items-center py-2">
                     <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-medium">
-                      {user?.name?.charAt(0) || 'U'}
+                      {getAvatar(user?.name)}
                     </div>
                     <span className="ml-2 text-sm font-medium">
                       {user?.name || 'User'}

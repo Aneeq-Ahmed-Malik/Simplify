@@ -1,30 +1,32 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Facebook, Twitter, Linkedin, Link, Share2, Heart, Copy, CheckCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/utils/auth";
+import { sharePost } from "@/utils/api";
 
 interface ShareOptionsProps {
   summaryText: string;
   title: string;
-  onLike?: () => void;
-  likesCount?: number;
-  isLiked?: boolean;
+  sources: { title: string; url: string; website: string }[];
+  
 }
 
 const ShareOptions = ({ 
   summaryText, 
   title, 
-  onLike = () => {}, 
-  likesCount = 0, 
-  isLiked = false 
+  sources,
+ 
 }: ShareOptionsProps) => {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [copied, setCopied] = useState(false);
   const truncatedSummary = summaryText.length > 100 
     ? summaryText.substring(0, 100) + "..." 
@@ -50,12 +52,37 @@ const ShareOptions = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleLike = () => {
-    onLike();
-    if (!isLiked) {
+  
+  const handleShareToFeed = async () => {
+    if (!isAuthenticated) {
       toast({
-        title: "Summary liked!",
-        description: "This summary has been added to your favorites",
+        title: "Login required",
+        description: "Please log in to share posts",
+        action: (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/login")}
+          >
+            Login
+          </Button>
+        ),
+      });
+      return;
+    }
+
+    try {
+      const urls = sources.map(source => source.url);
+      await sharePost(summaryText, title, urls);
+      toast({
+        title: "Success",
+        description: "Post shared to community feed",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to share post",
+        variant: "destructive",
       });
     }
   };
@@ -167,8 +194,8 @@ const ShareOptions = ({
 
         <Separator />
         
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-1">
+        <div className="flex items-center justify-center space-x-4">
+          {/* <div className="flex items-center space-x-1">
             <Button 
               variant="ghost" 
               size="sm" 
@@ -179,12 +206,13 @@ const ShareOptions = ({
               Like
             </Button>
             <span className="text-sm text-muted-foreground">{likesCount > 0 ? likesCount : ''}</span>
-          </div>
+          </div> */}
           
           <Button 
             variant="default" 
             size="sm"
             className="bg-primary/80 hover:bg-primary"
+            onClick={handleShareToFeed}
           >
             <Share2 className="mr-1 h-4 w-4" />
             Share to Feed

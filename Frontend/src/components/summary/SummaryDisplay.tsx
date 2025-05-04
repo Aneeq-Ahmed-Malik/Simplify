@@ -1,14 +1,15 @@
-// src/components/summary/SummaryDisplay.tsx
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ExternalLink, Maximize2, Minimize2, BookOpen, Edit, Check, X } from "lucide-react";
+import { ExternalLink, Maximize2, Minimize2, BookOpen, Edit, Check, X, Save } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/utils/auth";
+import { storeSummary } from "@/utils/api";
 
 interface Source {
   title: string;
@@ -18,15 +19,16 @@ interface Source {
 
 interface SummaryDisplayProps {
   summary: string;
-  sources: Source[] | undefined; // Allow undefined
+  sources: Source[] | undefined;
   topic: string;
-  onSummaryUpdate?: (updatedSummary: string) => void;
+  onSummaryUpdate?: (updatedSummary: string, updatedTopic: string) => void;
 }
 
 const SummaryDisplay = ({ summary, sources = [], topic, onSummaryUpdate }: SummaryDisplayProps) => {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editedSummary, setEditedSummary] = useState(summary);
+  const [editedTopic, setEditedTopic] = useState(topic);
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
@@ -41,30 +43,63 @@ const SummaryDisplay = ({ summary, sources = [], topic, onSummaryUpdate }: Summa
       toast({
         title: "Login required",
         description: "Please log in to edit summaries",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
     setEditedSummary(summary);
+    setEditedTopic(topic);
     setEditing(true);
   };
 
   const cancelEditing = () => {
     setEditing(false);
     setEditedSummary(summary);
+    setEditedTopic(topic);
   };
 
   const saveEdits = () => {
-    if (onSummaryUpdate) {
-      onSummaryUpdate(editedSummary);
+    if (!editedTopic.trim()) {
+      toast({
+        title: "Invalid topic",
+        description: "Topic cannot be empty",
+        variant: "destructive",
+      });
+      return;
     }
-    
+    if (onSummaryUpdate) {
+      onSummaryUpdate(editedSummary, editedTopic);
+    }
     setEditing(false);
-    
     toast({
       title: "Summary updated",
       description: "Your changes have been saved successfully",
     });
+  };
+
+  const handleStoreSummary = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Login required",
+        description: "Please log in to store summaries",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const response = await storeSummary(editedSummary, sources, editedTopic);
+      toast({
+        title: "Summary stored",
+        description: `Summary saved successfully!`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error storing summary",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const paragraphs = summary.split('\n');
@@ -81,29 +116,55 @@ const SummaryDisplay = ({ summary, sources = [], topic, onSummaryUpdate }: Summa
                 <Badge variant="outline" className="mb-2 bg-primary/10 hover:bg-primary/20">
                   {sources.length} {sources.length === 1 ? 'source' : 'sources'}
                 </Badge>
-                <CardTitle className="text-2xl">Summary: {topic}</CardTitle>
+                <CardTitle className="text-2xl">
+                  {editing ? (
+                    <Input
+                      value={editedTopic}
+                      onChange={(e) => setEditedTopic(e.target.value)}
+                      className="text-2xl font-bold"
+                      placeholder="Enter topic"
+                    />
+                  ) : (
+                    `Summary: ${editedTopic}`
+                  )}
+                </CardTitle>
                 <CardDescription className="flex items-center mt-1">
                   <BookOpen className="mr-1 h-3.5 w-3.5" />
                   Based on top articles about this topic
                 </CardDescription>
               </div>
-              {!editing && isAuthenticated && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={startEditing}
-                  className="hover:bg-secondary"
-                >
-                  <Edit className="h-4 w-4 mr-1" />
-                  Edit
-                </Button>
-              )}
+              <div className="flex space-x-2">
+                {isAuthenticated && (
+                  <>
+                    {!editing && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={startEditing}
+                        className="hover:bg-secondary"
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleStoreSummary}
+                      className="hover:bg-secondary"
+                    >
+                      <Save className="h-4 w-4 mr-1" />
+                      Store Summary
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             {editing ? (
               <div className="space-y-4">
-                <Textarea 
+                <Textarea
                   value={editedSummary}
                   onChange={(e) => setEditedSummary(e.target.value)}
                   className="min-h-[300px] font-sans"
@@ -111,7 +172,7 @@ const SummaryDisplay = ({ summary, sources = [], topic, onSummaryUpdate }: Summa
                 />
                 <Alert>
                   <AlertDescription>
-                    You are editing this summary. Your changes will be visible to anyone you share this with.
+                    You are editing this summary and topic. Your changes will be visible to anyone you share this with.
                   </AlertDescription>
                 </Alert>
                 <div className="flex justify-end space-x-2">
@@ -130,7 +191,6 @@ const SummaryDisplay = ({ summary, sources = [], topic, onSummaryUpdate }: Summa
                 {displayParagraphs.map((paragraph, index) => (
                   <p key={index} className="mb-4 leading-relaxed">{paragraph}</p>
                 ))}
-                
                 {hasMoreParagraphs && !expanded && (
                   <div className="text-center mt-2 pb-2">
                     <span className="text-muted-foreground text-sm">
@@ -158,9 +218,9 @@ const SummaryDisplay = ({ summary, sources = [], topic, onSummaryUpdate }: Summa
                         <h4 className="font-medium">{source.title}</h4>
                         <div className="flex items-center text-sm text-muted-foreground">
                           <span>{source.website}</span>
-                          <a 
-                            href={source.url} 
-                            target="_blank" 
+                          <a
+                            href={source.url}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="ml-2 flex items-center text-primary hover:underline"
                           >

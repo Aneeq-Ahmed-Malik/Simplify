@@ -1,25 +1,26 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { History as HistoryIcon, FileText, ExternalLink, Clock, BookOpen, TrendingUp, Info } from "lucide-react";
+import { History as HistoryIcon, FileText, ExternalLink, Clock, BookOpen, TrendingUp, Info, Store, Trash2 } from "lucide-react";
 import { useAuth } from "@/utils/auth";
-import { getSummaryHistory, SummaryHistoryItem } from "@/utils/api";
+import { getSummaryHistory, deleteSummary, SummaryHistoryItem } from "@/utils/api";
 import { format } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useToast } from "@/components/ui/use-toast";
 
 const History = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [history, setHistory] = useState<SummaryHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeView, setActiveView] = useState<"card" | "table">("card");
+  const { toast } = useToast();
+  const [deletingId, setDeletingId] = useState<string | null>(null); // Track which summary is being deleted
 
   useEffect(() => {
-    // Redirect if not authenticated
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !authLoading) {
       navigate("/login");
       return;
     }
@@ -29,34 +30,79 @@ const History = () => {
       try {
         const data = await getSummaryHistory();
         setHistory(data);
-      } catch (error) {
+        console.log("History data loaded:", data);
+      } catch (error: any) {
         console.error("Error loading history:", error);
+        toast({
+          title: "No History Found",
+          description: "Please generate and store summaries to view them",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadHistory();
-  }, [isAuthenticated, navigate]);
+    if (isAuthenticated && !authLoading) {
+      loadHistory();
+    }
+  }, [isAuthenticated, authLoading, navigate, toast]);
 
   const formatDate = (dateString: string) => {
-    return format(new Date(dateString), "MMM d, yyyy • h:mm a");
+    try {
+      return format(new Date(dateString), "MMM d, yyyy • h:mm a");
+    } catch {
+      return "Invalid date";
+    }
   };
 
-  // Sample stats for the dashboard (would be real in a complete app)
+  const handleViewDetails = (item: SummaryHistoryItem) => {
+    const state = {
+      summary: item.summary,
+      topic: item.topic,
+      sources: item.sources,
+    };
+    console.log("Navigating to /home with state:", state);
+    navigate("/home", { state });
+  };
+
+  const handleDelete = async (summaryId: string) => {
+    if (!confirm("Are you sure you want to delete this summary?")) return;
+
+    setDeletingId(summaryId); // Set loading state for this specific deletion
+    try {
+      const response = await deleteSummary(summaryId);
+      setHistory(history.filter((item) => item.id !== summaryId));
+      toast({
+        title: "Success",
+        description:  "Summary deleted successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete summary",
+        variant: "destructive",
+      });
+      // Optionally refetch history to restore the UI state
+      const data = await getSummaryHistory();
+      setHistory(data);
+    } finally {
+      setDeletingId(null); // Clear loading state
+    }
+  };
+
   const userStats = {
     totalSummaries: history.length,
     topTopic: history.length > 0 ? history[0].topic : "None yet",
     readingTime: history.reduce((acc, item) => acc + (item.summary.length / 1000), 0).toFixed(1),
-    lastActive: history.length > 0 ? formatDate(history[0].createdAt) : "No activity yet"
+    lastActive: history.length > 0 ? formatDate(history[0].createdAt) : "No activity yet",
   };
 
-  // Tips for better summaries
   const summaryTips = [
     "Use specific topics to get more focused summaries",
     "Try different websites for diverse perspectives",
     "Shorter summaries are great for quick overviews, longer ones for depth",
-    "Save your best summaries for quick reference later"
+    "Save your best summaries for quick reference later",
   ];
 
   return (
@@ -67,16 +113,16 @@ const History = () => {
           <h1 className="page-title mb-0">Your Summary History</h1>
         </div>
         <div className="flex items-center space-x-2">
-          <Button 
-            variant={activeView === "card" ? "default" : "outline"} 
+          <Button
+            variant={activeView === "card" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("card")}
           >
             <FileText className="h-4 w-4 mr-1" />
             Card View
           </Button>
-          <Button 
-            variant={activeView === "table" ? "default" : "outline"} 
+          <Button
+            variant={activeView === "table" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("table")}
           >
@@ -86,7 +132,6 @@ const History = () => {
         </div>
       </div>
 
-      {/* User Stats Dashboard */}
       <Card className="mb-6 bg-gradient-to-r from-secondary/30 to-primary/20 border-none shadow-md hover:shadow-lg transition-all">
         <CardHeader>
           <CardTitle className="text-gradient">Summary Dashboard</CardTitle>
@@ -126,7 +171,7 @@ const History = () => {
         </CardContent>
       </Card>
 
-      {isLoading ? (
+      {isLoading || authLoading ? (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
         </div>
@@ -139,11 +184,9 @@ const History = () => {
               <p className="text-muted-foreground mb-4">
                 Generate your first blog summary to see it here
               </p>
-              <Button onClick={() => navigate("/")}>Generate Summary</Button>
+              <Button onClick={() => navigate("/home")}>Generate Summary</Button>
             </CardContent>
           </Card>
-          
-          {/* Tips Section when empty */}
           <Card className="bg-gradient-to-br from-accent/20 to-background border-primary/20">
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -164,7 +207,7 @@ const History = () => {
               </ul>
             </CardContent>
             <CardFooter>
-              <Button variant="outline" className="w-full" onClick={() => navigate("/")}>
+              <Button variant="outline" className="w-full" onClick={() => navigate("/home")}>
                 Try These Tips Now
               </Button>
             </CardFooter>
@@ -183,39 +226,51 @@ const History = () => {
               </CardHeader>
               <CardContent>
                 <p className="line-clamp-3 mb-4">{item.summary}</p>
-                
                 <div>
                   <h4 className="text-sm font-semibold mb-2">Sources:</h4>
                   <div className="space-y-1">
                     {item.sources.map((source, index) => (
                       <div key={index} className="flex items-center text-sm">
                         <span className="text-muted-foreground">{source.website}:</span>
-                        <a 
-                          href={source.url} 
-                          target="_blank" 
+                        <a
+                          href={source.url}
+                          target="_blank"
                           rel="noopener noreferrer"
-                          className="ml-2 flex items-center hover:underline truncate"
+                          className="ml-2 text-primary hover:underline truncate"
+                          title={source.url}
                         >
-                          {source.title}
-                          <ExternalLink className="h-3 w-3 ml-1 flex-shrink-0" />
+                          {source.url.length > 30
+                            ? `${source.url.slice(0, Math.floor(source.url.length / 2))}...`
+                            : source.url}
+                          <ExternalLink className="h-3 w-3 ml-1 inline-block flex-shrink-0" />
                         </a>
                       </div>
                     ))}
                   </div>
                 </div>
-                
                 <Separator className="my-4" />
-                
-                <div className="flex justify-end">
-                  <Button 
-                    variant="outline" 
+                <div className="flex justify-between">
+                  <Button
+                    variant="outline"
                     size="sm"
-                    onClick={() => {
-                      // In a real app, this would load the selected summary
-                      navigate("/");
-                    }}
+                    onClick={() => handleViewDetails(item)}
                   >
                     View Details
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDelete(item.id)}
+                    disabled={deletingId === item.id}
+                  >
+                    {deletingId === item.id ? (
+                      <div className="flex items-center">
+                        <div className="w-4 h-4 border-2 border-t-transparent border-white rounded-full animate-spin mr-2" />
+                        Deleting...
+                      </div>
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </CardContent>
@@ -241,9 +296,30 @@ const History = () => {
                     <TableCell>{formatDate(item.createdAt)}</TableCell>
                     <TableCell>{item.sources.length} sources</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
-                        View
-                      </Button>
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewDetails(item)}
+                        >
+                          View
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDelete(item.id)}
+                          disabled={deletingId === item.id}
+                        >
+                          {deletingId === item.id ? (
+                            <div className="flex items-center">
+                              <div className="w-4 h-4 border-2 border-t-transparent border-white rounded-full animate-spin mr-2" />
+                              Deleting...
+                            </div>
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

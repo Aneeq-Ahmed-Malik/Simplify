@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import WebsiteSelector from "@/components/summary/WebsiteSelector";
 import TopicInput from "@/components/summary/TopicInput";
 import SummaryDisplay from "@/components/summary/SummaryDisplay";
@@ -9,12 +9,11 @@ import ShareOptions from "@/components/summary/ShareOptions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useAuth } from "@/utils/auth";
 import { getArticleSummary, generateAudio, downloadSummary } from "@/utils/api";
-
-import { FileText, AlertCircle, TrendingUp, BookOpen, History, Sparkles, Users, Zap, Star, Award, Bookmark, Loader2 } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { FileText, AlertCircle, TrendingUp, BookOpen, History, Sparkles, Users, Zap, Star, Award, Bookmark, Loader2, MessageSquare } from "lucide-react";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 
 interface Source {
@@ -23,9 +22,16 @@ interface Source {
   website: string;
 }
 
+interface NavigationState {
+  summary: string;
+  topic: string;
+  sources: Source[];
+}
+
 const Index = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  const { isAuthenticated, user } = useAuth(); // Added user to get email
   const { toast } = useToast();
   const [selectedWebsites, setSelectedWebsites] = useState<string[]>([]);
   const [searchTopic, setSearchTopic] = useState("");
@@ -35,11 +41,90 @@ const Index = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [navState, setNavState] = useState<NavigationState | null>(null);
+
+  useEffect(() => {
+    console.log("Index useEffect - Location:", location);
+    console.log("Index useEffect - location.state:", location.state);
+
+    if (location.state) {
+      const { summary, topic, sources } = location.state as {
+        summary?: string;
+        topic?: string;
+        sources?: Source[];
+      };
+      
+      if (summary && topic && sources) {
+        console.log("Applying state:", { summary, topic, sources });
+        setNavState({ summary, topic, sources });
+        setSummary(summary);
+        setSearchTopic(topic);
+        setSources(sources);
+        setSelectedWebsites(sources.map((source) => source.website));
+        setIsLiked(false);
+        setLikesCount(Math.floor(Math.random() * 50));
+      } else {
+        console.log("Incomplete state data:", { summary, topic, sources });
+      }
+    } else {
+      console.log("No location.state provided");
+    }
+
+    console.log("Current component state:", { summary, searchTopic, sources, selectedWebsites, navState });
+  }, [location]);
+
+  const handleClearNavState = () => {
+    console.log("Clearing navState");
+    setNavState(null);
+  };
 
   const trendingTopics = [
-    "AI Ethics", "Sustainable Energy", "Remote Work",
-    "Quantum Computing", "Mental Health", "Blockchain"
+    "AI Ethics",
+    "Sustainable Energy",
+    "Remote Work",
+    "Quantum Computing",
+    "Mental Health",
+    "Blockchain",
   ];
+
+  const sendEmailNotification = async (email: string, topic: string) => {
+    try {
+      const response = await fetch("http://localhost:5000/api/email/send-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: email,
+          subject: `Summary Generated for ${topic}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+              <h1 style="color: #333; font-size: 24px; margin-bottom: 20px;">Summary Generated</h1>
+              <p style="color: #555; font-size: 16px; line-height: 1.5;">
+                Hello,<br><br>
+                Your summary for "<strong>${topic}</strong>" has been generated successfully. Check it out in the Simplify app.<br><br>
+                Best regards,<br>
+                <strong>Team Simplify</strong>
+              </p>
+            </div>
+          `,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to send email notification");
+      }
+    } catch (error: any) {
+      console.error("Email notification error:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to send email notification. Please try again later.",
+      });
+      throw error;
+    }
+  };
 
   const handleSearch = async (topic: string) => {
     if (selectedWebsites.length === 0) {
@@ -55,22 +140,32 @@ const Index = () => {
     console.log("handleSearch called:", { topic, selectedWebsites });
     setIsLoading(true);
     setError(null);
+    handleClearNavState();
     try {
       const result = await getArticleSummary({
-        websites: selectedWebsites || [], // Fallback to empty array
+        websites: selectedWebsites || [],
         topic: topic,
       });
-      
+
       setSummary(result.summary);
       setSources(result.sources || []);
       setSearchTopic(topic);
-      
+
       setIsLiked(false);
       setLikesCount(Math.floor(Math.random() * 50));
-      
+
+      // Send email notification if user is authenticated
+      let emailSent = false;
+      if (isAuthenticated && user?.email) {
+        await sendEmailNotification(user.email, topic);
+        emailSent = true;
+      }
+
       toast({
         title: "Summary generated successfully!",
-        description: `We've compiled insights from ${selectedWebsites.join(", ")}.`,
+        description: emailSent
+          ? `We've compiled insights from ${selectedWebsites.join(", ")}. An email notification has been sent.`
+          : `We've compiled insights from ${selectedWebsites.join(", ")}.`,
       });
     } catch (error: any) {
       console.error("Error fetching summary:", error);
@@ -85,30 +180,41 @@ const Index = () => {
     }
   };
 
-  const handleSummaryUpdate = (updatedSummary: string) => {
+  const handleSummaryUpdate = (updatedSummary: string, updatedTopic: string) => {
+    console.log("handleSummaryUpdate called:", { updatedSummary, updatedTopic });
     setSummary(updatedSummary);
+    setSearchTopic(updatedTopic);
   };
 
   const handleGenerateAudio = async (text: string, voiceId: string) => {
     return await generateAudio(text, voiceId);
   };
 
-  const handleDownload = async (text: string, title: string, format: "txt" | "pdf" | "docx") => {
-    await downloadSummary(text, title, format);
+  const handleDownload = async (
+    text: string,
+    title: string,
+    format: "txt" | "pdf" | "docx"
+  ) => {
+    try {
+      await downloadSummary(text, title, format);
+    } catch (error: any) {
+      console.error("Handle Download Error:", error);
+      throw error;
+    }
   };
-  
+
   const handleLike = () => {
     if (isAuthenticated) {
       setIsLiked(!isLiked);
-      setLikesCount(prev => isLiked ? prev - 1 : prev + 1);
+      setLikesCount((prev) => (isLiked ? prev - 1 : prev + 1));
     } else {
       toast({
         title: "Login required",
         description: "Please log in to like summaries",
         action: (
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => navigate("/login")}
           >
             Login
@@ -116,6 +222,10 @@ const Index = () => {
         ),
       });
     }
+  };
+
+  const handleChatWithSummary = () => {
+    navigate("/chat", { state: { summary, topic: searchTopic, sources } });
   };
 
   const handleBookmarkTopic = (topic: string) => {
@@ -129,9 +239,9 @@ const Index = () => {
         title: "Login required",
         description: "Please log in to bookmark topics",
         action: (
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => navigate("/login")}
           >
             Login
@@ -146,18 +256,18 @@ const Index = () => {
       <div className="flex items-center justify-between mb-6">
         <h1 className="page-title mb-0 text-gradient">Simplify</h1>
         <div className="hidden sm:flex items-center space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => navigate("/feed")}
             className="card-hover"
           >
             <Users className="mr-2 h-4 w-4" />
             Community Feed
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => navigate("/history")}
             className="card-hover"
           >
@@ -166,7 +276,7 @@ const Index = () => {
           </Button>
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <Card className="md:col-span-2 card-hover">
           <CardHeader>
@@ -179,21 +289,22 @@ const Index = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <WebsiteSelector 
+            <WebsiteSelector
               onWebsiteSelect={setSelectedWebsites}
               selectedWebsites={selectedWebsites}
             />
-            
             <TopicInput onSearch={handleSearch} isLoading={isLoading} />
-            
             {!isAuthenticated && (
-              <Alert variant="default" className="bg-secondary/50 dark:bg-secondary/20">
+              <Alert
+                variant="default"
+                className="bg-secondary/50 dark:bg-secondary/20"
+              >
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Login required for full features</AlertTitle>
                 <AlertDescription className="flex items-center">
-                  To save summaries, access history, and enable downloads, please 
-                  <Button 
-                    variant="link" 
+                  To save summaries, access history, and enable downloads, please
+                  <Button
+                    variant="link"
                     className="p-0 h-auto font-semibold ml-1"
                     onClick={() => navigate("/login")}
                   >
@@ -204,7 +315,7 @@ const Index = () => {
             )}
           </CardContent>
         </Card>
-        
+
         <Card className="glass-card animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center text-xl">
@@ -249,7 +360,7 @@ const Index = () => {
           </CardContent>
         </Card>
       </div>
-      
+
       {error && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-4 w-4" />
@@ -257,7 +368,7 @@ const Index = () => {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {isLoading && (
         <Card className="mb-6 animate-pulse">
           <CardContent className="flex items-center justify-center py-10">
@@ -266,7 +377,7 @@ const Index = () => {
           </CardContent>
         </Card>
       )}
-      
+
       {!isLoading && !summary && (
         <Card className="mb-6 animate-fade-in">
           <CardHeader>
@@ -280,11 +391,8 @@ const Index = () => {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="topics">
-              <TabsList className="mb-4">
-                <TabsTrigger value="topics">Popular Topics</TabsTrigger>
-                <TabsTrigger value="summaries">Recent Summaries</TabsTrigger>
-              </TabsList>
               
+
               <TabsContent value="topics">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {trendingTopics.map((topic, index) => (
@@ -297,10 +405,10 @@ const Index = () => {
                           </p>
                         </div>
                         <div className="flex space-x-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSearch(topic);
@@ -308,114 +416,66 @@ const Index = () => {
                           >
                             <Zap className="h-3.5 w-3.5" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleBookmarkTopic(topic);
-                            }}
-                          >
-                            <Bookmark className="h-3.5 w-3.5" />
-                          </Button>
+                         
                         </div>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               </TabsContent>
+
               
-              <TabsContent value="summaries">
-                <div className="space-y-4">
-                  <div className="flex items-start space-x-4 p-4 bg-secondary/20 rounded-lg">
-                    <div className="mt-1">
-                      <Star className="h-5 w-5 text-amber-500" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium">The Future of Remote Work</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Remote work is here to stay, with 82% of companies planning to allow employees to work remotely at least part-time after the pandemic...
-                      </p>
-                      <div className="flex items-center mt-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-xs p-0 h-auto hover:bg-transparent hover:underline"
-                          onClick={() => handleSearch("The Future of Remote Work")}
-                        >
-                          Generate similar summary
-                        </Button>
-                        <Separator orientation="vertical" className="h-3 mx-2" />
-                        <span className="text-xs text-muted-foreground">Generated 2 hours ago</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-start space-x-4 p-4 bg-secondary/20 rounded-lg">
-                    <div className="mt-1">
-                      <Award className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium">Sustainable Energy Solutions for 2025</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Renewable energy sources continue to gain momentum with solar and wind power becoming increasingly affordable alternatives to fossil fuels...
-                      </p>
-                      <div className="flex items-center mt-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-xs p-0 h-auto hover:bg-transparent hover:underline"
-                          onClick={() => handleSearch("Sustainable Energy Solutions")}
-                        >
-                          Generate similar summary
-                        </Button>
-                        <Separator orientation="vertical" className="h-3 mx-2" />
-                        <span className="text-xs text-muted-foreground">Generated 1 day ago</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
             </Tabs>
           </CardContent>
           <CardFooter>
-            <Button variant="outline" className="w-full" onClick={() => navigate("/feed")}>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate("/feed")}
+            >
               <Users className="mr-2 h-4 w-4" />
               Explore Community Feed
             </Button>
           </CardFooter>
         </Card>
       )}
-      
+
       {!isLoading && summary && (
-        <SummaryDisplay 
-          summary={summary} 
+        <SummaryDisplay
+          summary={summary}
           sources={sources}
           topic={searchTopic}
           onSummaryUpdate={handleSummaryUpdate}
         />
       )}
-      
       {summary && !isLoading && (
         <div className="mt-6 space-y-6 animate-fade-in">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <AudioPlayer 
+            <AudioPlayer
               summaryText={summary}
+              searchTopic={searchTopic}
               onGenerateAudio={handleGenerateAudio}
             />
-            <DownloadOptions 
+            <DownloadOptions
               summaryText={summary}
-              title={searchTopic || "Summary"}
+              title={searchTopic}
               onDownload={handleDownload}
             />
           </div>
-          <ShareOptions 
-            summaryText={summary}
-            title={searchTopic || "Summary"}
-            onLike={handleLike}
-            isLiked={isLiked}
-            likesCount={likesCount}
-          />
+          <div className="flex space-x-4">
+            <ShareOptions
+              summaryText={summary}
+              title={searchTopic || "Summary"}
+              sources={sources}
+            />
+            <Button
+              onClick={handleChatWithSummary}
+              className="card-hover"
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Chat with Summary
+            </Button>
+          </div>
         </div>
       )}
     </div>

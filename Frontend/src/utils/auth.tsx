@@ -2,7 +2,6 @@ import { useState, useEffect, createContext, useContext } from "react";
 import axios from "axios";
 
 interface User {
-  id: string;
   name: string;
   email: string;
 }
@@ -26,49 +25,59 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored user data and token on component mount
     const storedUser = localStorage.getItem(STORAGE_KEY);
     const storedToken = localStorage.getItem(TOKEN_KEY);
 
     if (storedUser && storedToken) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        // Validate parsedUser structure
-        if (parsedUser && typeof parsedUser === "object" && parsedUser.id && parsedUser.name && parsedUser.email) {
-          setUser(parsedUser);
+        if (parsedUser && typeof parsedUser === "object" && parsedUser.name && parsedUser.email) {
+          // Verify token with backend
+          axios.get("http://localhost:5000/api/auth/verify", {
+            headers: { Authorization: `Bearer ${storedToken}` },
+          })
+            .then(response => {
+              setUser(parsedUser);
+              setIsLoading(false);
+            })
+            .catch(error => {
+              console.warn("Token verification failed:", error.response?.data);
+              localStorage.removeItem(STORAGE_KEY);
+              localStorage.removeItem(TOKEN_KEY);
+              setIsLoading(false);
+            });
         } else {
           console.warn("Invalid user data in localStorage, clearing...");
           localStorage.removeItem(STORAGE_KEY);
           localStorage.removeItem(TOKEN_KEY);
+          setIsLoading(false);
         }
       } catch (error) {
         console.error("Failed to parse user data from localStorage:", error);
-        // Clear invalid data to prevent repeated errors
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(TOKEN_KEY);
+        setIsLoading(false);
       }
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
-
     try {
       const response = await axios.post("http://localhost:5000/api/auth/login", {
         email,
         password,
       });
       const { token, user } = response.data;
-      console.log("Login response:", { token, user }); // Debug
+      console.log("Login response:", { token, user });
 
       setUser(user);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
       localStorage.setItem(TOKEN_KEY, token);
-    } catch (error) {
-      throw new Error(
-        error.response?.data?.message || "Login failed. Please try again."
-      );
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || "Login failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -76,7 +85,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const register = async (name: string, email: string, password: string) => {
     setIsLoading(true);
-
     try {
       const response = await axios.post("http://localhost:5000/api/auth/register", {
         name,
@@ -84,15 +92,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         password,
       });
       const { token, user } = response.data;
-      console.log("Register response:", { token, user }); // Debug
+      console.log("Register response:", { token, user });
 
       setUser(user);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
       localStorage.setItem(TOKEN_KEY, token);
-    } catch (error) {
-      throw new Error(
-        error.response?.data?.message || "Registration failed. Please try again."
-      );
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -122,10 +128,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
-
   return context;
 };

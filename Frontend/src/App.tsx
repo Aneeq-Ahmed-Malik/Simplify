@@ -13,6 +13,7 @@ import Feed from "./pages/Feed";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import { Navigate } from "react-router-dom";
+import Chatbot from "./pages/Chatbot";
 
 const queryClient = new QueryClient();
 
@@ -33,9 +34,10 @@ const App = () => (
                   <Route path="/feed" element={<Feed />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
+                  <Route path="/chat" element={<Chatbot />} />                  
                   <Route path="*" element={<Navigate to="/home" replace />} />
-                  </Routes>
-                  <Toaster />
+                </Routes>
+                <Toaster />
               </main>
             </div>
           </BrowserRouter>

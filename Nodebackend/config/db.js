@@ -1,19 +1,20 @@
+// This file is responsible for connecting to the MySQL database using Sequelize ORM.
 const { Sequelize } = require('sequelize');
 
-// Hardcoded MySQL credentials
 const sequelize = new Sequelize('simplify', 'root', 'Burhan4800@', {
   host: 'localhost',
   dialect: 'mysql',
-  logging: false,
+  logging: console.log,
 });
 
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
     console.log('MySQL connected');
-    await sequelize.sync(); // Sync models with database
+    await sequelize.sync();
+    console.log('Database synced');
   } catch (error) {
-    console.error('MySQL connection error:', error);
+    console.error('MySQL connection or sync error:', error);
     process.exit(1);
   }
 };
