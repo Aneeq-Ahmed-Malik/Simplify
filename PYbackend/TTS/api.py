@@ -36,7 +36,7 @@ model = load_model()
 speakers = ['en_112', 'en_8', 'en_63', 'en_0']  # Available speaker options
 
 # Helper: Split long text into small sentences for better audio
-def split_text(text, max_len=250):
+def split_text(text, max_len=1000):
     sentences = re.split(r'(?<=[.!?])\s+', text.strip())
     chunks = []
     current_chunk = ""
