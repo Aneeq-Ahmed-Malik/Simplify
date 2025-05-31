@@ -1,10 +1,4 @@
-Ah, I see — you want me to **rewrite your README** properly, **including** your **new features**:
-chatbot, multiple voice agents, posting summaries to your app + social media.
 
-Let’s create a **professional, complete README** for your project:
-Here’s the updated version:
-
----
 
 # 🧠 Simplify — Scrape, Summarize, Chat, and Share Web Content
 
@@ -119,5 +113,3 @@ For major changes, please open an issue first to discuss what you would like to 
 
 ---
 
-Would you also like me to help you create some badges (like `Python`, `FastAPI`, `Made with ❤️`, etc.) at the top of the README? They look very professional! 🚀
-Would you want that too? 🎖️
